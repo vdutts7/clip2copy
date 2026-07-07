@@ -1,7 +1,7 @@
 class Clip2copy < Formula
   desc "Auto-copy macOS screenshots to clipboard when saved"
   homepage "https://github.com/vdutts7/clip2copy"
-  url "https://github.com/vdutts7/clip2copy.git", tag: "v1.1.0"
+  url "https://github.com/vdutts7/clip2copy.git", tag: "v1.1.1"
   license "MIT"
   head "https://github.com/vdutts7/clip2copy.git", branch: "main"
 
@@ -11,6 +11,9 @@ class Clip2copy < Formula
   def install
     system "make", "build-fast"
     bin.install "bin/clip2copy"
+    libexec.install "Scripts/tui_render.py"
+    libexec.install "scripts/clip2copy-setup.sh"
+    chmod 0755, libexec/"clip2copy-setup.sh", libexec/"tui_render.py"
 
     (libexec/"clip2copy-watch").write <<~SCRIPT
       #!/bin/zsh

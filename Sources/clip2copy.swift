@@ -6,7 +6,7 @@ import Foundation
 /// Source: https://github.com/vdutts7/clip2copy
 /// License: MIT
 
-let VERSION = "1.1.0"
+let VERSION = "1.1.1"
 let AUTHOR = "vdutts7"
 let HOMEPAGE = "https://vd7.io"
 let REPO = "https://github.com/vdutts7/clip2copy"
@@ -205,7 +205,28 @@ func promptYesNo(_ message: String, default defaultYes: Bool) -> Bool {
     return defaultYes
 }
 
-func cmdSetup() throws {
+func locateSetupScript() -> String? {
+    let exe = URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath()
+    let candidates = [
+        exe.deletingLastPathComponent().appendingPathComponent("../libexec/clip2copy-setup.sh"),
+        exe.deletingLastPathComponent().appendingPathComponent("../scripts/clip2copy-setup.sh"),
+        URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("scripts/clip2copy-setup.sh"),
+    ]
+    for url in candidates {
+        let path = url.standardized.path
+        if FileManager.default.isExecutableFile(atPath: path) {
+            return path
+        }
+    }
+    return nil
+}
+
+func isQuiet() -> Bool {
+    ProcessInfo.processInfo.environment["CLIP2COPY_QUIET"] == "1"
+}
+
+func cmdSetupPlain() throws {
     let systemLoc = ScreenshotSettings.effectiveLocation()
     let existing = Clip2CopyConfig.load()
 
@@ -259,6 +280,28 @@ func cmdSetup() throws {
     """)
 }
 
+func cmdSetup() throws {
+    if CommandLine.arguments.contains("--plain") {
+        try cmdSetupPlain()
+        return
+    }
+    guard let script = locateSetupScript() else {
+        try cmdSetupPlain()
+        return
+    }
+    var env = ProcessInfo.processInfo.environment
+    env["CLIP2COPY_BIN"] = CommandLine.arguments[0]
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+    process.arguments = [script]
+    process.environment = env
+    try process.run()
+    process.waitUntilExit()
+    if process.terminationStatus != 0 {
+        throw ConfigError.invalidValue("setup failed")
+    }
+}
+
 func cmdConfigShow() {
     let config = Clip2CopyConfig.loadOrDefault()
     let hasConfig = Clip2CopyConfig.load() != nil
@@ -296,6 +339,10 @@ func cmdConfigGet(_ key: String) throws {
         print(config.rename ? "1" : "0")
     case "shadow":
         print(config.disableShadow ? "1" : "0")
+    case "macos-location":
+        print(ScreenshotSettings.effectiveLocation())
+    case "config-path":
+        print(Clip2CopyConfig.configURL().path)
     default:
         throw ConfigError.invalidKey(key)
     }
@@ -315,8 +362,10 @@ func cmdConfigSet(_ key: String, _ value: String) throws {
     }
     try config.save()
     try ScreenshotSettings.apply(config: config)
-    print("🟢 \(key) = \(value)")
-    print("Restart watcher: brew services restart clip2copy")
+    if !isQuiet() {
+        print("🟢 \(key) = \(value)")
+        print("Restart watcher: brew services restart clip2copy")
+    }
 }
 
 func cmdConfigApply() throws {
