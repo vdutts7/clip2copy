@@ -1,21 +1,44 @@
 #!/bin/zsh
-# clip2copy-setup — z7z-style TUI wizard
+# clip2copy-setup — z7z-style TUI wizard (works from brew libexec or source tree)
 set -euo pipefail
 
-CLIP="${CLIP2COPY_BIN:-$(command -v clip2copy)}"
-[[ -x "$CLIP" ]] || { echo "clip2copy-setup: clip2copy not found" >&2; exit 1; }
+HERE="${0:A:h}"
+HERE="${HERE:A}"
 
-DIR="${0:A:h}"
-TUI_PY="${CLIP2COPY_TUI_PY:-$DIR/tui_render.py}"
-[[ -f "$TUI_PY" ]] || TUI_PY="${DIR:h}/Scripts/tui_render.py"
-[[ -f "$TUI_PY" ]] || { echo "clip2copy-setup: tui_render.py not found" >&2; exit 1; }
+# brew:  $PREFIX/opt/clip2copy/libexec → ../bin/clip2copy
+# dev:   repo/scripts            → ../bin/clip2copy
+CLIP="${CLIP2COPY_BIN:-$HERE/../bin/clip2copy}"
+TUI_PY="${CLIP2COPY_TUI_PY:-$HERE/tui_render.py}"
+PY="${CLIP2COPY_PYTHON:-/usr/bin/python3}"
 
-tui() { python3 "$TUI_PY" render; }
+if [[ ! -x "$CLIP" ]] && command -v clip2copy >/dev/null 2>&1; then
+  _c="$(command -v clip2copy)"
+  CLIP="${_c:A}"
+fi
+
+if [[ ! -x "$CLIP" ]]; then
+  echo "clip2copy-setup: binary not found" >&2
+  echo "  tried: ${CLIP2COPY_BIN:-$HERE/../bin/clip2copy}" >&2
+  echo "  reinstall: brew reinstall clip2copy" >&2
+  exit 1
+fi
+
+if [[ ! -f "$TUI_PY" ]]; then
+  echo "clip2copy-setup: tui_render.py not found at $TUI_PY" >&2
+  exit 1
+fi
+
+if [[ ! -x "$PY" ]]; then
+  PY="$(command -v python3 2>/dev/null || true)"
+fi
+[[ -n "$PY" ]] || PY="/usr/bin/python3"
+
+tui() { "$PY" "$TUI_PY" render; }
 
 tui_error() {
   local msg="$1"
   local hint="${2:-try again or press Ctrl+C to cancel}"
-  MSG="$msg" HINT="$hint" python3 - <<'PY' | tui
+  MSG="$msg" HINT="$hint" "$PY" - <<'PY' | tui
 import json, os
 print(json.dumps({"boxes": [{"title": "ERROR", "title_color": "red", "fields": [
     {"id": "error", "value": os.environ.get("MSG", "unknown error"), "role": "error"},
@@ -26,7 +49,7 @@ PY
 
 prompt() {
   local msg="$1" default="$2"
-  if [[ -t 1 ]]; then
+  if [[ -t 0 && -t 1 ]]; then
     print -n $'\033[2m\033[3m> '"${msg}"$' \033[1;96m['"${default}"$']\033[0m\033[2m: \033[0m'
   else
     printf '> %s [%s]: ' "$msg" "$default"
@@ -48,22 +71,22 @@ prompt_yn() {
 validate_or_error() {
   local key="$1" value="$2"
   local err
-  if err="$($CLIP config validate "$key" "$value" 2>&1)"; then
+  if err="$("$CLIP" config validate "$key" "$value" 2>&1)"; then
     return 0
   fi
   tui_error "$err"
   return 1
 }
 
-MACOS_LOC="$($CLIP config get macos-location 2>/dev/null || echo "$HOME/Desktop")"
-VERSION="$($CLIP --version 2>/dev/null | awk 'NR==1{print $2}')"
-CONFIG_PATH="$($CLIP config get config-path 2>/dev/null || echo "$HOME/.config/clip2copy/config.json")"
-EXISTING_LOC="$($CLIP config get location 2>/dev/null || true)"
-EXISTING_PREFIX="$($CLIP config get prefix 2>/dev/null || echo ss)"
+MACOS_LOC="$("$CLIP" config get macos-location 2>/dev/null || echo "$HOME/Desktop")"
+VERSION="$("$CLIP" --version 2>/dev/null | awk 'NR==1{print $2}')"
+CONFIG_PATH="$("$CLIP" config get config-path 2>/dev/null || echo "$HOME/.config/clip2copy/config.json")"
+EXISTING_LOC="$("$CLIP" config get location 2>/dev/null || true)"
+EXISTING_PREFIX="$("$CLIP" config get prefix 2>/dev/null || echo ss)"
 
 export VERSION MACOS_LOC
 
-python3 - <<'PY' | tui
+"$PY" - <<'PY' | tui
 import json, os
 print(json.dumps({"boxes": [{"title": "CLIP2COPY SETUP", "title_color": "cyan", "fields": [
     {"id": "version", "label": "version", "value": os.environ.get("VERSION", "")},
@@ -72,7 +95,7 @@ print(json.dumps({"boxes": [{"title": "CLIP2COPY SETUP", "title_color": "cyan", 
 ]}]}))
 PY
 
-python3 - <<'PY' | tui
+"$PY" - <<'PY' | tui
 import json
 print(json.dumps({"boxes": [{"type": "list", "title": "SAVE LOCATION", "title_color": "cyan", "items": [
     {"prefix": "1) ", "label": "Downloads", "description": "recommended"},
@@ -119,7 +142,7 @@ RENAME="off"
 PREFIX="$EXISTING_PREFIX"
 if prompt_yn "Rename screenshots" "y"; then
   RENAME="on"
-  python3 - <<'PY' | tui
+  "$PY" - <<'PY' | tui
 import json
 print(json.dumps({"boxes": [{"type": "list", "title": "RENAME", "title_color": "cyan", "items": [
     {"prefix": "● ", "label": "prefix-random.png", "description": "e.g. ss-a1b2c3.png"},
@@ -138,14 +161,14 @@ prompt_yn "Drop window shadow" "y" && SHADOW="on" || SHADOW="off"
 "$CLIP" config set shadow "$SHADOW"
 unset CLIP2COPY_QUIET
 
-FINAL_LOC="$($CLIP config get location)"
-RENAME_L="$($CLIP config get rename)"
-PREFIX_L="$($CLIP config get prefix)"
-SHADOW_L="$($CLIP config get shadow)"
+FINAL_LOC="$("$CLIP" config get location)"
+RENAME_L="$("$CLIP" config get rename)"
+PREFIX_L="$("$CLIP" config get prefix)"
+SHADOW_L="$("$CLIP" config get shadow)"
 
 export FINAL_LOC RENAME_L PREFIX_L SHADOW_L CONFIG_PATH
 
-python3 - <<'PY' | tui
+"$PY" - <<'PY' | tui
 import json, os
 rename_on = os.environ.get("RENAME_L") == "1"
 prefix = os.environ.get("PREFIX_L", "ss")
