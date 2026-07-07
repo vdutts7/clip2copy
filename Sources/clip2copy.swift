@@ -6,7 +6,7 @@ import Foundation
 /// Source: https://github.com/vdutts7/clip2copy
 /// License: MIT
 
-let VERSION = "1.1.1"
+let VERSION = "1.2.0"
 let AUTHOR = "vdutts7"
 let HOMEPAGE = "https://vd7.io"
 let REPO = "https://github.com/vdutts7/clip2copy"
@@ -14,7 +14,35 @@ let REPO = "https://github.com/vdutts7/clip2copy"
 struct Clip2CopyConfig: Codable {
     var location: String
     var rename: Bool
+    var renamePrefix: String
     var disableShadow: Bool
+
+    init(location: String, rename: Bool, renamePrefix: String = "ss", disableShadow: Bool) {
+        self.location = location
+        self.rename = rename
+        self.renamePrefix = renamePrefix
+        self.disableShadow = disableShadow
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        location = try c.decode(String.self, forKey: .location)
+        rename = try c.decode(Bool.self, forKey: .rename)
+        renamePrefix = try c.decodeIfPresent(String.self, forKey: .renamePrefix) ?? "ss"
+        disableShadow = try c.decode(Bool.self, forKey: .disableShadow)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(location, forKey: .location)
+        try c.encode(rename, forKey: .rename)
+        try c.encode(renamePrefix, forKey: .renamePrefix)
+        try c.encode(disableShadow, forKey: .disableShadow)
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case location, rename, renamePrefix, disableShadow
+    }
 
     static func defaultLocation() -> String {
         FileManager.default.homeDirectoryForCurrentUser
@@ -41,6 +69,7 @@ struct Clip2CopyConfig: Codable {
         load() ?? Clip2CopyConfig(
             location: defaultLocation(),
             rename: true,
+            renamePrefix: "ss",
             disableShadow: true
         )
     }
@@ -95,14 +124,7 @@ enum ScreenshotSettings {
     }
 
     static func apply(config: Clip2CopyConfig) throws {
-        let location = expandPath(config.location)
-        var isDir: ObjCBool = false
-        if !FileManager.default.fileExists(atPath: location, isDirectory: &isDir) {
-            try FileManager.default.createDirectory(atPath: location, withIntermediateDirectories: true)
-        } else if !isDir.boolValue {
-            throw ConfigError.notADirectory(location)
-        }
-
+        let location = try validateLocation(config.location, createIfMissing: true)
         _ = Shell.run("/usr/bin/defaults", ["write", "com.apple.screencapture", "location", location])
         _ = Shell.run("/usr/bin/defaults", [
             "write", "com.apple.screencapture", "disable-shadow",
@@ -114,6 +136,7 @@ enum ScreenshotSettings {
 
 enum ConfigError: Error, CustomStringConvertible {
     case notADirectory(String)
+    case notWritable(String)
     case invalidKey(String)
     case invalidValue(String)
     case missingArgument(String)
@@ -121,6 +144,7 @@ enum ConfigError: Error, CustomStringConvertible {
     var description: String {
         switch self {
         case .notADirectory(let path): return "Not a directory: \(path)"
+        case .notWritable(let path): return "Directory is not writable: \(path)"
         case .invalidKey(let key): return "Unknown config key: \(key)"
         case .invalidValue(let msg): return msg
         case .missingArgument(let msg): return msg
@@ -147,6 +171,56 @@ func expandPath(_ path: String) -> String {
     return (trimmed as NSString).expandingTildeInPath
 }
 
+func validatePrefix(_ input: String) throws -> String {
+    let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else {
+        throw ConfigError.invalidValue("Prefix cannot be empty")
+    }
+    guard trimmed.count <= 32 else {
+        throw ConfigError.invalidValue("Prefix too long (max 32 chars)")
+    }
+    let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "_-"))
+    guard trimmed.unicodeScalars.allSatisfy({ allowed.contains($0) }) else {
+        throw ConfigError.invalidValue("Invalid prefix '\(trimmed)': use letters, numbers, _ - only")
+    }
+    return trimmed
+}
+
+func validateLocation(_ input: String, createIfMissing: Bool = true) throws -> String {
+    let path = expandPath(input)
+    guard !path.isEmpty else {
+        throw ConfigError.invalidValue("Path cannot be empty")
+    }
+
+    let fm = FileManager.default
+    var isDir: ObjCBool = false
+
+    if fm.fileExists(atPath: path, isDirectory: &isDir) {
+        guard isDir.boolValue else {
+            throw ConfigError.notADirectory(path)
+        }
+    } else if createIfMissing {
+        let parent = (path as NSString).deletingLastPathComponent
+        if !parent.isEmpty && parent != "/" && !fm.fileExists(atPath: parent) {
+            _ = try validateLocation(parent, createIfMissing: true)
+        }
+        do {
+            try fm.createDirectory(atPath: path, withIntermediateDirectories: true)
+        } catch {
+            throw ConfigError.invalidValue("Cannot create '\(path)': \(error.localizedDescription)")
+        }
+    } else {
+        throw ConfigError.invalidValue("Directory does not exist: \(path)")
+    }
+
+    let probe = (path as NSString).appendingPathComponent(".clip2copy-write-test")
+    guard fm.createFile(atPath: probe, contents: Data(), attributes: nil) else {
+        throw ConfigError.notWritable(path)
+    }
+    try? fm.removeItem(atPath: probe)
+    return path
+}
+
 func printUsage() {
     print("""
     clip2copy - auto-copy macOS screenshots to clipboard
@@ -157,6 +231,7 @@ func printUsage() {
       clip2copy config show                Show saved + system settings
       clip2copy config get <key>           Print one value (for scripts)
       clip2copy config set <key> <value>   Update one setting
+      clip2copy config validate <key> <value>  Validate without saving
       clip2copy config apply               Re-apply macOS screenshot location
       clip2copy status                     Check config + service hints
       clip2copy --version
@@ -165,6 +240,7 @@ func printUsage() {
     Config keys:
       location       desktop | downloads | /any/path
       rename         on | off
+      prefix         filename prefix when rename on (default: ss → ss-<hex>.png)
       shadow         on | off   (drop shadow on screenshots)
 
     Notes:
@@ -178,14 +254,27 @@ func printUsage() {
 }
 
 func resolveLocationInput(_ input: String) throws -> String {
-    let path = expandPath(input)
-    var isDir: ObjCBool = false
-    if FileManager.default.fileExists(atPath: path, isDirectory: &isDir) {
-        guard isDir.boolValue else { throw ConfigError.notADirectory(path) }
-        return path
+    try validateLocation(input, createIfMissing: true)
+}
+
+func renameLabel(_ config: Clip2CopyConfig) -> String {
+    if config.rename {
+        return "on (\(config.renamePrefix)-<hex>.png)"
     }
-    try FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
-    return path
+    return "off (keep macOS filename)"
+}
+
+func cmdConfigValidate(_ key: String, _ value: String) throws {
+    switch key {
+    case "location":
+        _ = try validateLocation(value, createIfMissing: true)
+    case "prefix":
+        _ = try validatePrefix(value)
+    case "rename", "shadow":
+        _ = try parseBool(value)
+    default:
+        throw ConfigError.invalidKey(key)
+    }
 }
 
 func prompt(_ message: String, default defaultValue: String) -> String {
@@ -251,17 +340,39 @@ func cmdSetupPlain() throws {
     case "2":
         location = try resolveLocationInput("desktop")
     case "3":
-        location = try resolveLocationInput(prompt("Folder path", default: Clip2CopyConfig.defaultLocation()))
+        while true {
+            let candidate = prompt("Folder path", default: Clip2CopyConfig.defaultLocation())
+            do {
+                location = try resolveLocationInput(candidate)
+                break
+            } catch {
+                print("🔴 \(error)")
+            }
+        }
     default:
         location = try resolveLocationInput("downloads")
     }
 
-    let rename = promptYesNo("Rename screenshots to ss-<random>.png?", default: existing?.rename ?? true)
+    let rename = promptYesNo("Rename screenshots?", default: existing?.rename ?? true)
+    var prefix = existing?.renamePrefix ?? "ss"
+    if rename {
+        while true {
+            let candidate = prompt("Filename prefix", default: prefix)
+            do {
+                prefix = try validatePrefix(candidate)
+                break
+            } catch {
+                print("🔴 \(error)")
+            }
+        }
+    }
+
     let shadow = promptYesNo("Drop window shadow on screenshots?", default: existing?.disableShadow ?? true)
 
     let config = Clip2CopyConfig(
         location: location,
         rename: rename,
+        renamePrefix: prefix,
         disableShadow: shadow
     )
     try config.save()
@@ -271,7 +382,7 @@ func cmdSetupPlain() throws {
     🟢 clip2copy configured
 
       Save location : \(config.location)
-      Rename files  : \(config.rename ? "yes" : "no")
+      Rename files  : \(renameLabel(config))
       Drop shadow   : \(config.disableShadow ? "yes" : "no")
       Config file   : \(Clip2CopyConfig.configURL().path)
 
@@ -309,7 +420,8 @@ func cmdConfigShow() {
     print("─────────────────────────────────────")
     print("Config file : \(Clip2CopyConfig.configURL().path)\(hasConfig ? "" : " (defaults — run setup)")")
     print("location    : \(config.location)")
-    print("rename      : \(config.rename)")
+    print("rename      : \(renameLabel(config))")
+    print("prefix      : \(config.renamePrefix)")
     print("shadow off  : \(config.disableShadow)")
     print("")
     print("macOS screencapture")
@@ -339,6 +451,8 @@ func cmdConfigGet(_ key: String) throws {
         print(config.rename ? "1" : "0")
     case "shadow":
         print(config.disableShadow ? "1" : "0")
+    case "prefix":
+        print(config.renamePrefix)
     case "macos-location":
         print(ScreenshotSettings.effectiveLocation())
     case "config-path":
@@ -352,13 +466,18 @@ func cmdConfigSet(_ key: String, _ value: String) throws {
     var config = Clip2CopyConfig.loadOrDefault()
     switch key {
     case "location":
-        config.location = try resolveLocationInput(value)
+        config.location = try validateLocation(value, createIfMissing: true)
     case "rename":
         config.rename = try parseBool(value)
+    case "prefix":
+        config.renamePrefix = try validatePrefix(value)
     case "shadow":
         config.disableShadow = try parseBool(value)
     default:
         throw ConfigError.invalidKey(key)
+    }
+    if config.rename {
+        config.renamePrefix = try validatePrefix(config.renamePrefix)
     }
     try config.save()
     try ScreenshotSettings.apply(config: config)
@@ -386,7 +505,8 @@ func cmdStatus() {
     print("watch dir   : \(config.location)")
     print("macOS saves : \(systemLoc)")
     print("in sync     : \(aligned ? "yes" : "no — run: clip2copy config apply")")
-    print("rename      : \(config.rename ? "on" : "off")")
+    print("rename      : \(renameLabel(config))")
+    print("prefix      : \(config.renamePrefix)")
     print("config      : \(Clip2CopyConfig.configURL().path)")
 
     let svc = Shell.run("/bin/zsh", ["-lc", "brew services list 2>/dev/null | grep clip2copy || true"])
@@ -448,6 +568,9 @@ func main() -> Int32 {
                 try cmdConfigSet(args[2], args[3])
             case "apply":
                 try cmdConfigApply()
+            case "validate":
+                guard args.count >= 4 else { throw ConfigError.missingArgument("config validate <key> <value>") }
+                try cmdConfigValidate(args[2], args[3])
             default:
                 throw ConfigError.invalidKey(args[1])
             }

@@ -19,9 +19,15 @@ PALETTE = {
     "green": "\033[92m",
     "cyan": "\033[96m",
     "magenta": "\033[95m",
+    "red": "\033[91m",
 }
 
-TITLE_COLORS = {"cyan": "cyan", "green": "green", "red": "green", "yellow": "green"}
+TITLE_COLORS = {
+    "cyan": "cyan",
+    "green": "green",
+    "red": "red",
+    "yellow": "green",
+}
 
 
 def use_color() -> bool:
@@ -66,6 +72,7 @@ def box_field(label: str, value: str, role: str = "value", suffix: str = "") -> 
         "elapsed": "magenta",
         "note": "dim",
         "status": None,
+        "error": "red",
     }
     vc = c(roles.get(role, "cyan"))
     if role == "note":
@@ -73,6 +80,9 @@ def box_field(label: str, value: str, role: str = "value", suffix: str = "") -> 
         return
     if role == "status":
         print(f"{c('bold')}│{c('reset')}  {c('dim')}{label}:{c('reset')} {value}")
+        return
+    if role == "error":
+        print(f"{c('bold')}│{c('reset')}  {c('red')}{value}{c('reset')}")
         return
     suf = ""
     if suffix:

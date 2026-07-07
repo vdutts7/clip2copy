@@ -117,10 +117,18 @@ Stored at `~/.config/clip2copy/config.json`.
 | Key | CLI | Default | Description |
 |-----|-----|---------|-------------|
 | `location` | `config set location …` | `~/Downloads` | Where screenshots save + watcher watches |
-| `rename` | `config set rename on\|off` | `on` | Rename to `ss-<hex>.png` |
-| `disableShadow` | `config set shadow on\|off` | `on` | Drop window shadow (`com.apple.screencapture disable-shadow`) |
+| `rename` | `config set rename on\|off` | `on` | Rename screenshots (off = keep macOS name) |
+| `renamePrefix` | `config set prefix …` | `ss` | Prefix when rename on → `ss-a1b2c3.png` |
+| `disableShadow` | `config set shadow on\|off` | `on` | Drop window shadow |
 
-`config set` and `setup` both override macOS screenshot location — regardless of prior Desktop/Downloads/System Settings choice.
+Paths are validated on set: must be a directory (created if missing) and writable. Prefix: 1–32 chars `[A-Za-z0-9_-]`.
+
+```bash
+clip2copy config validate location ~/Pictures/Caps   # dry-run check
+clip2copy config validate prefix myshot
+clip2copy config set prefix cap                      # cap-deadbeef.png
+clip2copy config set rename off                      # keep Screenshot….png
+```
 
 <br/>
 
