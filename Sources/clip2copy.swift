@@ -6,7 +6,7 @@ import Foundation
 /// Source: https://github.com/vdutts7/clip2copy
 /// License: MIT
 
-let VERSION = "1.2.2"
+let VERSION = "1.2.3"
 let AUTHOR = "vdutts7"
 let HOMEPAGE = "https://vd7.io"
 let REPO = "https://github.com/vdutts7/clip2copy"
@@ -443,6 +443,11 @@ func cmdSetup() throws {
     process.standardInput = FileHandle.standardInput
     process.standardOutput = FileHandle.standardOutput
     process.standardError = FileHandle.standardError
+    // Interactive prompts need /dev/tty — FileHandle.standardInput is often not the terminal
+    if FileManager.default.isReadableFile(atPath: "/dev/tty"),
+       let ttyIn = FileHandle(forReadingAtPath: "/dev/tty") {
+        process.standardInput = ttyIn
+    }
     try process.run()
     process.waitUntilExit()
     if process.terminationStatus != 0 {

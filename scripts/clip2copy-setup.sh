@@ -54,7 +54,7 @@ prompt() {
   else
     printf '> %s [%s]: ' "$msg" "$default"
   fi
-  read -r _reply
+  read -r _reply || true
   [[ -n "${_reply// /}" ]] && print -r -- "$_reply" || print -r -- "$default"
 }
 
