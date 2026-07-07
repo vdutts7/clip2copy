@@ -49,6 +49,8 @@ service-stop:
 test: build-fast
 	@$(BUILD_DIR)/$(BINARY) --version
 	@$(BUILD_DIR)/$(BINARY) --help >/dev/null
+	@$(BUILD_DIR)/$(BINARY) config show >/dev/null
+	@$(BUILD_DIR)/$(BINARY) status >/dev/null
 
 clean:
 	@rm -rf $(BUILD_DIR)

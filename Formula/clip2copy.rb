@@ -1,7 +1,7 @@
 class Clip2copy < Formula
   desc "Auto-copy macOS screenshots to clipboard when saved"
   homepage "https://github.com/vdutts7/clip2copy"
-  url "https://github.com/vdutts7/clip2copy.git", tag: "v1.0.0"
+  url "https://github.com/vdutts7/clip2copy.git", tag: "v1.1.0"
   license "MIT"
   head "https://github.com/vdutts7/clip2copy.git", branch: "main"
 
@@ -16,11 +16,15 @@ class Clip2copy < Formula
       #!/bin/zsh
       FSWATCH="#{Formula["fswatch"].opt_bin}/fswatch"
       CLIP="#{bin}/clip2copy"
-      WATCH="${CLIP2COPY_DIR:-$HOME/Downloads}"
-      RENAME="${CLIP2COPY_RENAME:-1}"
-
+      [[ -x "$FSWATCH" ]] || { echo "fswatch not found" >&2; exit 1; }
+      [[ -x "$CLIP" ]] || { echo "clip2copy not found" >&2; exit 1; }
+      WATCH="$("$CLIP" config get location 2>/dev/null)"
+      RENAME="$("$CLIP" config get rename 2>/dev/null)"
+      WATCH="${WATCH:-$HOME/Downloads}"
+      RENAME="${RENAME:-1}"
       "$FSWATCH" "$WATCH" | while read -r f; do
         [[ "$f" == *Screenshot*.png ]] || continue
+        [[ "$f" == */ss-* ]] && continue
         [[ "$(basename "$f")" == .* ]] && continue
         prev=0; cur=1
         while [[ "$prev" != "$cur" ]]; do
@@ -48,21 +52,27 @@ class Clip2copy < Formula
 
   def caveats
     <<~EOS
-      Start the watcher at login:
+      Run the setup wizard (sets screenshot save location + clip2copy config):
+        clip2copy setup
+
+      Start / restart the watcher:
         brew services start clip2copy
+        brew services restart clip2copy   # after config changes
 
-      Optional — save screenshots to Downloads (no shadow):
-        defaults write com.apple.screencapture location "$HOME/Downloads"
-        defaults write com.apple.screencapture disable-shadow -bool true
-        killall SystemUIServer 2>/dev/null || true
+      CLI config anytime:
+        clip2copy config show
+        clip2copy config set location downloads
+        clip2copy config set location desktop
+        clip2copy config set location ~/Pictures/Screenshots
+        clip2copy config set rename off
+        clip2copy config set shadow on
 
-      Config (env vars for the service):
-        CLIP2COPY_DIR    watch directory (default: ~/Downloads)
-        CLIP2COPY_RENAME set to 0 to keep macOS screenshot filenames
+      macOS factory default (when unset): ~/Desktop
     EOS
   end
 
   test do
     assert_match "clip2copy", shell_output("#{bin}/clip2copy --version")
+    assert_match "location", shell_output("#{bin}/clip2copy config show")
   end
 end

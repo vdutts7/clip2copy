@@ -45,16 +45,35 @@ macOS saves screenshots as files but does not always put them on the clipboard. 
 
 ```bash
 brew tap vdutts7/tap
+brew update
 brew install clip2copy
+clip2copy setup              # wizard — pick save folder, applies macOS override
 brew services start clip2copy
 ```
 
-Optional — point screenshots at Downloads:
+### Setup wizard
+
+On first install, run `clip2copy setup`. It:
+
+1. Shows where macOS **currently** saves screenshots
+2. Lets you pick **Downloads**, **Desktop**, or a **custom path**
+3. Writes `com.apple.screencapture location` — same as System Settings → Screenshots
+4. Saves config to `~/.config/clip2copy/config.json`
+5. Tells you to restart the watcher
+
+**macOS factory default** (when never configured): `~/Desktop`
+
+Change settings anytime:
 
 ```bash
-defaults write com.apple.screencapture location "$HOME/Downloads"
-defaults write com.apple.screencapture disable-shadow -bool true
-killall SystemUIServer 2>/dev/null || true
+clip2copy config show
+clip2copy config set location downloads
+clip2copy config set location desktop
+clip2copy config set location ~/Pictures/Screenshots
+clip2copy config set rename off
+clip2copy config set shadow on      # drop window shadow
+clip2copy status
+brew services restart clip2copy     # after changes
 ```
 
 ### From source
@@ -93,10 +112,15 @@ tail -f $(brew --prefix)/var/log/clip2copy.log
 
 ## Config
 
-| Env var | Default | Description |
-|---------|---------|-------------|
-| `CLIP2COPY_DIR` | `~/Downloads` | Directory to watch |
-| `CLIP2COPY_RENAME` | `1` | `0` = keep macOS filename |
+Stored at `~/.config/clip2copy/config.json`.
+
+| Key | CLI | Default | Description |
+|-----|-----|---------|-------------|
+| `location` | `config set location …` | `~/Downloads` | Where screenshots save + watcher watches |
+| `rename` | `config set rename on\|off` | `on` | Rename to `ss-<hex>.png` |
+| `disableShadow` | `config set shadow on\|off` | `on` | Drop window shadow (`com.apple.screencapture disable-shadow`) |
+
+`config set` and `setup` both override macOS screenshot location — regardless of prior Desktop/Downloads/System Settings choice.
 
 <br/>
 
