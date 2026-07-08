@@ -6,7 +6,7 @@ import Foundation
 /// Source: https://github.com/vdutts7/clip2copy
 /// License: MIT
 
-let VERSION = "1.2.8"
+let VERSION = "1.2.9"
 let AUTHOR = "vdutts7"
 let HOMEPAGE = "https://vd7.io"
 let REPO = "https://github.com/vdutts7/clip2copy"
@@ -284,8 +284,7 @@ func cmdConfigValidate(_ key: String, _ value: String) throws {
 }
 
 func promptPrefix(default defaultValue: String) -> String {
-    let hint = defaultValue.isEmpty ? "none" : defaultValue
-    print("Filename prefix — Enter = none, adds text before random id (e.g. ss → ss-a1b2c3.png) [\(hint)]: ", terminator: "")
+    print("Filename prefix (e.g. ss → ss-a1b2c3.png) [Enter for none]: ", terminator: "")
     fflush(stdout)
     guard let line = readLine()?.trimmingCharacters(in: .whitespacesAndNewlines) else {
         return defaultValue
