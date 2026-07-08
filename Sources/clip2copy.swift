@@ -6,7 +6,7 @@ import Foundation
 /// Source: https://github.com/vdutts7/clip2copy
 /// License: MIT
 
-let VERSION = "1.3.2"
+let VERSION = "1.3.3"
 let AUTHOR = "vdutts7"
 let HOMEPAGE = "https://vd7.io"
 let REPO = "https://github.com/vdutts7/clip2copy"
@@ -46,7 +46,7 @@ struct Clip2CopyConfig: Codable {
 
     static func defaultLocation() -> String {
         FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Downloads").path
+            .appendingPathComponent("Desktop").path
     }
 
     static func configDir() -> URL {

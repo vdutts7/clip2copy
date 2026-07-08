@@ -19,15 +19,44 @@ fi
 [[ -x "$FSWATCH" ]] || { print -u2 "clip2copy-watch: fswatch not found"; exit 1 }
 [[ -x "$CLIP" ]] || { print -u2 "clip2copy-watch: clip2copy not found"; exit 1 }
 
-WATCH="$("$CLIP" config get location 2>/dev/null || true)"
+CONFIG_PATH="$("$CLIP" config get config-path 2>/dev/null || true)"
+if [[ -f "$CONFIG_PATH" ]]; then
+  WATCH="$("$CLIP" config get location 2>/dev/null || true)"
+else
+  WATCH="$("$CLIP" config get macos-location 2>/dev/null || true)"
+fi
 RENAME="$("$CLIP" config get rename 2>/dev/null || true)"
 PREFIX="$("$CLIP" config get prefix 2>/dev/null || true)"
-WATCH="${WATCH:-$HOME/Downloads}"
+WATCH="${WATCH:-$HOME/Desktop}"
 RENAME="${RENAME:-1}"
 
+[[ -d "$WATCH" ]] || { print -u2 "clip2copy-watch: watch dir missing: $WATCH"; exit 1 }
+print -u2 "clip2copy-watch: watching $WATCH rename=$RENAME prefix=${PREFIX:-none}"
+
+# fswatch often emits regular space; macOS screenshot names use U+202F before AM/PM
+resolve_screenshot_path() {
+  local f="$1"
+  [[ -f "$f" ]] && { print -r -- "$f"; return 0 }
+
+  local alt="$f"
+  alt="${alt// PM/$'\u202f'PM}"
+  alt="${alt// AM/$'\u202f'AM}"
+  [[ -f "$alt" ]] && { print -r -- "$alt"; return 0 }
+
+  return 1
+}
+
+screenshot_like() {
+  local base="$(basename "$1")"
+  [[ "$base" == *.png ]] || return 1
+  [[ "$base" == Screenshot* || "$base" == "Screen Shot"* ]] || return 1
+  [[ "$base" == .* ]] && return 1
+  return 0
+}
+
 "$FSWATCH" "$WATCH" | while read -r f; do
-  [[ "$f" == *Screenshot*.png ]] || continue
-  [[ "$(basename "$f")" == .* ]] && continue
+  screenshot_like "$f" || continue
+  f="$(resolve_screenshot_path "$f")" || continue
 
   prev=0
   cur=1
@@ -36,17 +65,30 @@ RENAME="${RENAME:-1}"
     sleep 0.1
     cur=$(/usr/bin/stat -f%z "$f" 2>/dev/null || print -r -- 0)
   done
+  [[ -f "$f" ]] || continue
 
+  dir="${f:h}"
   if [[ "$RENAME" == "1" ]]; then
     hex="$(/usr/bin/openssl rand -hex 6)"
     if [[ -n "$PREFIX" ]]; then
-      newf="$WATCH/${PREFIX}-${hex}.png"
+      newf="$dir/${PREFIX}-${hex}.png"
     else
-      newf="$WATCH/${hex}.png"
+      newf="$dir/${hex}.png"
     fi
-    /bin/mv "$f" "$newf" || continue
-    "$CLIP" "$newf" || true
+    /bin/mv -- "$f" "$newf" || {
+      print -u2 "clip2copy-watch: rename failed $f"
+      continue
+    }
+    if "$CLIP" "$newf"; then
+      print -u2 "clip2copy-watch: copied $newf"
+    else
+      print -u2 "clip2copy-watch: copy failed $newf"
+    fi
   else
-    "$CLIP" "$f" || true
+    if "$CLIP" "$f"; then
+      print -u2 "clip2copy-watch: copied $f"
+    else
+      print -u2 "clip2copy-watch: copy failed $f"
+    fi
   fi
 done

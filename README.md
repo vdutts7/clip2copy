@@ -4,7 +4,7 @@
 
 <h1 align="center">clip2copy</h1>
 <p align="center"><i><b>auto-copy macOS screenshots to clipboard (+ rename)</b></i></p>
-<p><kbd>brew tap vdutts7/tap && brew install clip2copy</kbd></p>
+<p><kbd>brew tap vdutts7/tap && brew update && brew install vdutts7/tap/clip2copy</kbd></p>
 <p align="center"><kbd>⌘</kbd><kbd>⇧</kbd><kbd>4</kbd> → <kbd>⌘</kbd><kbd>V</kbd></p>
 
 <p align="center">
@@ -51,7 +51,7 @@ One time:
 ```bash
 brew tap vdutts7/tap
 brew update
-brew install clip2copy
+brew install vdutts7/tap/clip2copy
 clip2copy setup
 ```
 `clip2copy setup`:
