@@ -6,7 +6,7 @@ import Foundation
 /// Source: https://github.com/vdutts7/clip2copy
 /// License: MIT
 
-let VERSION = "1.3.3"
+let VERSION = "1.3.4"
 let AUTHOR = "vdutts7"
 let HOMEPAGE = "https://vd7.io"
 let REPO = "https://github.com/vdutts7/clip2copy"
@@ -510,12 +510,28 @@ func cmdStatus() {
 
 func cmdCopy(_ path: String) -> Int32 {
     let expanded = expandPath(path)
-    guard let img = NSImage(contentsOfFile: expanded) else {
-        fputs("failed\n", stderr)
+    guard FileManager.default.isReadableFile(atPath: expanded) else {
+        fputs("clip2copy: not readable: \(expanded)\n", stderr)
         return 1
     }
-    NSPasteboard.general.clearContents()
-    NSPasteboard.general.writeObjects([img])
+    guard let data = try? Data(contentsOf: URL(fileURLWithPath: expanded)) else {
+        fputs("clip2copy: read failed: \(expanded)\n", stderr)
+        return 1
+    }
+    let pb = NSPasteboard.general
+    pb.clearContents()
+    if pb.setData(data, forType: .png) {
+        print("copied")
+        return 0
+    }
+    guard let img = NSImage(contentsOfFile: expanded) else {
+        fputs("clip2copy: decode failed: \(expanded)\n", stderr)
+        return 1
+    }
+    guard pb.writeObjects([img]) else {
+        fputs("clip2copy: pasteboard write failed\n", stderr)
+        return 1
+    }
     print("copied")
     return 0
 }

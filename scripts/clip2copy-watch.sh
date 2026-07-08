@@ -54,6 +54,16 @@ screenshot_like() {
   return 0
 }
 
+copy_to_clipboard() {
+  local target="$1"
+  if "$CLIP" "$target"; then
+    print -u2 "clip2copy-watch: copied $target"
+    return 0
+  fi
+  print -u2 "clip2copy-watch: copy failed $target"
+  return 1
+}
+
 "$FSWATCH" "$WATCH" | while read -r f; do
   screenshot_like "$f" || continue
   f="$(resolve_screenshot_path "$f")" || continue
@@ -67,28 +77,20 @@ screenshot_like() {
   done
   [[ -f "$f" ]] || continue
 
+  copy_to_clipboard "$f" || continue
+
+  [[ "$RENAME" == "1" ]] || continue
+
   dir="${f:h}"
-  if [[ "$RENAME" == "1" ]]; then
-    hex="$(/usr/bin/openssl rand -hex 6)"
-    if [[ -n "$PREFIX" ]]; then
-      newf="$dir/${PREFIX}-${hex}.png"
-    else
-      newf="$dir/${hex}.png"
-    fi
-    /bin/mv -- "$f" "$newf" || {
-      print -u2 "clip2copy-watch: rename failed $f"
-      continue
-    }
-    if "$CLIP" "$newf"; then
-      print -u2 "clip2copy-watch: copied $newf"
-    else
-      print -u2 "clip2copy-watch: copy failed $newf"
-    fi
+  hex="$(/usr/bin/openssl rand -hex 6)"
+  if [[ -n "$PREFIX" ]]; then
+    newf="$dir/${PREFIX}-${hex}.png"
   else
-    if "$CLIP" "$f"; then
-      print -u2 "clip2copy-watch: copied $f"
-    else
-      print -u2 "clip2copy-watch: copy failed $f"
-    fi
+    newf="$dir/${hex}.png"
+  fi
+  if /bin/mv -- "$f" "$newf"; then
+    print -u2 "clip2copy-watch: renamed $newf"
+  else
+    print -u2 "clip2copy-watch: rename skipped (copied already) $f"
   fi
 done
