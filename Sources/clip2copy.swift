@@ -6,7 +6,7 @@ import Foundation
 /// Source: https://github.com/vdutts7/clip2copy
 /// License: MIT
 
-let VERSION = "1.3.1"
+let VERSION = "1.3.2"
 let AUTHOR = "vdutts7"
 let HOMEPAGE = "https://vd7.io"
 let REPO = "https://github.com/vdutts7/clip2copy"

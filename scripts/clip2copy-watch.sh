@@ -1,8 +1,20 @@
 #!/usr/bin/env zsh
 # clip2copy-watch — fswatch loop: detect screenshot PNGs, rename, copy to clipboard
 
-FSWATCH="${CLIP2COPY_FSWATCH:-$(command -v fswatch)}"
-CLIP="${CLIP2COPY_BIN:-$(command -v clip2copy)}"
+FSWATCH="${CLIP2COPY_FSWATCH:-$(command -v fswatch 2>/dev/null)}"
+CLIP="${CLIP2COPY_BIN:-$(command -v clip2copy 2>/dev/null)}"
+
+# launchd has no PATH — fall back to common Homebrew locations
+if [[ -z "$FSWATCH" || ! -x "$FSWATCH" ]]; then
+  for _p in /opt/homebrew/bin/fswatch /usr/local/bin/fswatch; do
+    [[ -x "$_p" ]] && FSWATCH="$_p" && break
+  done
+fi
+if [[ -z "$CLIP" || ! -x "$CLIP" ]]; then
+  for _p in /opt/homebrew/bin/clip2copy /usr/local/bin/clip2copy; do
+    [[ -x "$_p" ]] && CLIP="$_p" && break
+  done
+fi
 
 [[ -x "$FSWATCH" ]] || { print -u2 "clip2copy-watch: fswatch not found"; exit 1 }
 [[ -x "$CLIP" ]] || { print -u2 "clip2copy-watch: clip2copy not found"; exit 1 }

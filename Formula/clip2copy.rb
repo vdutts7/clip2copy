@@ -1,7 +1,7 @@
 class Clip2copy < Formula
   desc "Auto-copy macOS screenshots to clipboard when saved"
   homepage "https://github.com/vdutts7/clip2copy"
-  url "https://github.com/vdutts7/clip2copy.git", tag: "v1.3.1"
+  url "https://github.com/vdutts7/clip2copy.git", tag: "v1.3.2"
   license "MIT"
   head "https://github.com/vdutts7/clip2copy.git", branch: "main"
 
@@ -15,6 +15,13 @@ class Clip2copy < Formula
     rm_f libexec/"clip2copy-watch"
     libexec.install "scripts/clip2copy-watch.sh" => "clip2copy-watch"
     chmod 0755, libexec/"clip2copy-watch"
+    # launchd PATH is empty — bake brew paths at install time
+    inreplace libexec/"clip2copy-watch",
+              'FSWATCH="${CLIP2COPY_FSWATCH:-$(command -v fswatch 2>/dev/null)}"',
+              "FSWATCH=\"${CLIP2COPY_FSWATCH:-#{Formula["fswatch"].opt_bin}/fswatch}\""
+    inreplace libexec/"clip2copy-watch",
+              'CLIP="${CLIP2COPY_BIN:-$(command -v clip2copy 2>/dev/null)}"',
+              "CLIP=\"${CLIP2COPY_BIN:-#{bin}/clip2copy}\""
   end
 
   service do
