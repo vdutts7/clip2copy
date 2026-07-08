@@ -48,21 +48,16 @@ print(json.dumps({"boxes": [{"title": "ERROR", "title_color": "red", "fields": [
 PY
 }
 
-# Sets REPLY — never prints prompts to stdout (avoids $(...) capture bugs)
+# Sets REPLY — prompts go to /dev/tty only (never stdout)
 prompt() {
   local msg="$1" default="$2" reply=""
   if [[ -r $TTY && -w $TTY ]]; then
-    if [[ -t 1 || -t 2 ]]; then
-      print -n $'\033[2m\033[3m> '"${msg}"$' \033[1;96m['"${default}"$']\033[0m\033[2m: \033[0m' >"$TTY"
-    else
-      printf '> %s [%s]: ' "$msg" "$default" >"$TTY"
-    fi
+    printf '> %s [%s]: ' "$msg" "$default" >"$TTY"
     read -r reply <"$TTY" || true
   else
     printf '> %s [%s]: ' "$msg" "$default" >&2
     read -r reply || true
   fi
-  # strip accidental prompt echo if stdout was ever captured
   if [[ "$reply" == '>'*': '* ]]; then
     reply="${reply##*: }"
   fi
@@ -140,13 +135,14 @@ case "$CHOICE" in
 esac
 
 export CLIP2COPY_QUIET=1
+export CLIP2COPY_NO_APPLY=1
 while true; do
   if "$CLIP" config set location "$LOCATION"; then
     break
   fi
   tui_error "failed to save location"
   if [[ "$CHOICE" != "3" ]]; then
-    unset CLIP2COPY_QUIET
+    unset CLIP2COPY_QUIET CLIP2COPY_NO_APPLY
     exit 1
   fi
   prompt "Folder path (retry)" "${EXISTING_LOC:-$HOME/Downloads}"
@@ -155,15 +151,15 @@ done
 
 RENAME="off"
 PREFIX="$EXISTING_PREFIX"
-if prompt_yn "Rename screenshots" "y"; then
-  RENAME="on"
-  "$PY" - <<'PY' | tui
+"$PY" - <<'PY' | tui
 import json
 print(json.dumps({"boxes": [{"type": "list", "title": "RENAME", "title_color": "cyan", "items": [
     {"prefix": "● ", "label": "prefix-random.png", "description": "e.g. ss-a1b2c3.png"},
     {"prefix": "● ", "label": "keep off", "description": "macOS Screenshot name"},
 ]}]}))
 PY
+if prompt_yn "Rename screenshots" "y"; then
+  RENAME="on"
   while true; do
     prompt "Filename prefix" "$EXISTING_PREFIX"
     PREFIX="$REPLY"
@@ -173,9 +169,16 @@ fi
 
 "$CLIP" config set rename "$RENAME"
 [[ "$RENAME" == "on" ]] && "$CLIP" config set prefix "$PREFIX"
+"$PY" - <<'PY' | tui
+import json
+print(json.dumps({"boxes": [{"title": "SHADOW", "title_color": "cyan", "fields": [
+    {"id": "note", "label": "note", "value": "drop window shadow on screenshots?", "role": "note"},
+]}]}))
+PY
 prompt_yn "Drop window shadow" "y" && SHADOW="on" || SHADOW="off"
 "$CLIP" config set shadow "$SHADOW"
-unset CLIP2COPY_QUIET
+unset CLIP2COPY_QUIET CLIP2COPY_NO_APPLY
+"$CLIP" config apply >/dev/null
 
 FINAL_LOC="$("$CLIP" config get location)"
 RENAME_L="$("$CLIP" config get rename)"

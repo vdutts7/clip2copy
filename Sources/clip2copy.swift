@@ -1,4 +1,5 @@
 import Cocoa
+import Darwin
 import Foundation
 
 /// clip2copy - auto-copy macOS screenshots to clipboard
@@ -6,7 +7,7 @@ import Foundation
 /// Source: https://github.com/vdutts7/clip2copy
 /// License: MIT
 
-let VERSION = "1.2.5"
+let VERSION = "1.2.6"
 let AUTHOR = "vdutts7"
 let HOMEPAGE = "https://vd7.io"
 let REPO = "https://github.com/vdutts7/clip2copy"
@@ -339,6 +340,10 @@ func isQuiet() -> Bool {
     ProcessInfo.processInfo.environment["CLIP2COPY_QUIET"] == "1"
 }
 
+func isNoApply() -> Bool {
+    ProcessInfo.processInfo.environment["CLIP2COPY_NO_APPLY"] == "1"
+}
+
 func cmdSetupPlain() throws {
     let systemLoc = ScreenshotSettings.effectiveLocation()
     let existing = Clip2CopyConfig.load()
@@ -443,14 +448,11 @@ func cmdSetup() throws {
     process.standardInput = FileHandle.standardInput
     process.standardOutput = FileHandle.standardOutput
     process.standardError = FileHandle.standardError
-    // Wizard needs full TTY — Process() stdio is often pipes, not the terminal
+    // Prompts read /dev/tty inside the script; only wire stdin when Process() has a pipe
     if FileManager.default.isReadableFile(atPath: "/dev/tty"),
-       FileManager.default.isWritableFile(atPath: "/dev/tty"),
        let ttyIn = FileHandle(forReadingAtPath: "/dev/tty"),
-       let ttyOut = FileHandle(forWritingAtPath: "/dev/tty") {
+       isatty(fileno(stdin)) != 1 {
         process.standardInput = ttyIn
-        process.standardOutput = ttyOut
-        process.standardError = ttyOut
     }
     try process.run()
     process.waitUntilExit()
@@ -526,7 +528,9 @@ func cmdConfigSet(_ key: String, _ value: String) throws {
         config.renamePrefix = try validatePrefix(config.renamePrefix)
     }
     try config.save()
-    try ScreenshotSettings.apply(config: config)
+    if !isNoApply() {
+        try ScreenshotSettings.apply(config: config)
+    }
     if !isQuiet() {
         print("🟢 \(key) = \(value)")
         print("Restart watcher: brew services restart clip2copy")
