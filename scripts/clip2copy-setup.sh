@@ -4,6 +4,7 @@ set -euo pipefail
 
 HERE="${0:A:h}"
 HERE="${HERE:A}"
+TTY=/dev/tty
 
 # brew:  $PREFIX/opt/clip2copy/libexec → ../bin/clip2copy
 # dev:   repo/scripts            → ../bin/clip2copy
@@ -47,36 +48,40 @@ print(json.dumps({"boxes": [{"title": "ERROR", "title_color": "red", "fields": [
 PY
 }
 
+# Sets REPLY — never prints prompts to stdout (avoids $(...) capture bugs)
 prompt() {
-  local msg="$1" default="$2"
-  # prompts on stderr — stdout is captured by $(prompt ...)
-  if [[ -r /dev/tty ]]; then
-    if [[ -t 1 ]]; then
-      print -n $'\033[2m\033[3m> '"${msg}"$' \033[1;96m['"${default}"$']\033[0m\033[2m: \033[0m' >/dev/tty
+  local msg="$1" default="$2" reply=""
+  if [[ -r $TTY && -w $TTY ]]; then
+    if [[ -t 1 || -t 2 ]]; then
+      print -n $'\033[2m\033[3m> '"${msg}"$' \033[1;96m['"${default}"$']\033[0m\033[2m: \033[0m' >"$TTY"
     else
-      printf '> %s [%s]: ' "$msg" "$default" >/dev/tty
+      printf '> %s [%s]: ' "$msg" "$default" >"$TTY"
     fi
-    read -r _reply </dev/tty || true
+    read -r reply <"$TTY" || true
   else
     printf '> %s [%s]: ' "$msg" "$default" >&2
-    read -r _reply || true
+    read -r reply || true
   fi
-  [[ -n "${_reply// /}" ]] && print -r -- "$_reply" || print -r -- "$default"
+  # strip accidental prompt echo if stdout was ever captured
+  if [[ "$reply" == '>'*': '* ]]; then
+    reply="${reply##*: }"
+  fi
+  [[ -n "${reply// /}" ]] || reply="$default"
+  REPLY="$reply"
 }
 
 prompt_yn() {
-  local msg="$1" default="$2" hint
+  local msg="$1" default="$2" hint ans
   [[ "$default" == "y" ]] && hint="Y/n" || hint="y/N"
-  local ans
-  ans="$(prompt "$msg ($hint)" "$default")"
+  prompt "$msg ($hint)" "$default"
+  ans="$REPLY"
   [[ "$ans" == [yY]* ]] && return 0
   [[ "$ans" == [nN]* ]] && return 1
   [[ "$default" == "y" ]]
 }
 
 validate_or_error() {
-  local key="$1" value="$2"
-  local err
+  local key="$1" value="$2" err
   if err="$("$CLIP" config validate "$key" "$value" 2>&1)"; then
     return 0
   fi
@@ -110,15 +115,18 @@ print(json.dumps({"boxes": [{"type": "list", "title": "SAVE LOCATION", "title_co
 ]}]}))
 PY
 
-CHOICE="$(prompt "Choice" "1")"
+prompt "Choice" "1"
+CHOICE="$REPLY"
 LOCATION=""
 case "$CHOICE" in
   2) LOCATION="desktop" ;;
   3)
     while true; do
-      LOCATION="$(prompt "Folder path" "${EXISTING_LOC:-$HOME/Downloads}")"
+      prompt "Folder path" "${EXISTING_LOC:-$HOME/Downloads}"
+      LOCATION="$REPLY"
       [[ "${LOCATION:l}" == "back" ]] && {
-        CHOICE="$(prompt "Choice" "1")"
+        prompt "Choice" "1"
+        CHOICE="$REPLY"
         case "$CHOICE" in
           2) LOCATION="desktop"; break ;;
           *) LOCATION="downloads"; break ;;
@@ -141,7 +149,8 @@ while true; do
     unset CLIP2COPY_QUIET
     exit 1
   fi
-  LOCATION="$(prompt "Folder path (retry)" "${EXISTING_LOC:-$HOME/Downloads}")"
+  prompt "Folder path (retry)" "${EXISTING_LOC:-$HOME/Downloads}"
+  LOCATION="$REPLY"
 done
 
 RENAME="off"
@@ -156,7 +165,8 @@ print(json.dumps({"boxes": [{"type": "list", "title": "RENAME", "title_color": "
 ]}]}))
 PY
   while true; do
-    PREFIX="$(prompt "Filename prefix" "$EXISTING_PREFIX")"
+    prompt "Filename prefix" "$EXISTING_PREFIX"
+    PREFIX="$REPLY"
     validate_or_error prefix "$PREFIX" && break
   done
 fi

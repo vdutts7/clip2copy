@@ -5,7 +5,7 @@ SOURCES = Sources/clip2copy.swift
 BUILD_DIR = bin
 WATCH_SCRIPT = scripts/clip2copy-watch.sh
 
-.PHONY: build build-fast install install-user install-watch service-start service-stop test clean
+.PHONY: build build-fast install install-user install-watch service-start service-stop test test-setup-prompt clean
 
 build:
 	@echo "Building $(BINARY) (universal)..."
@@ -46,11 +46,14 @@ service-stop:
 	@pkill -f clip2copy-watch || true
 	@echo "Stopped clip2copy-watch"
 
-test: build-fast
+test: build-fast test-setup-prompt
 	@$(BUILD_DIR)/$(BINARY) --version
 	@$(BUILD_DIR)/$(BINARY) --help >/dev/null
 	@$(BUILD_DIR)/$(BINARY) config show >/dev/null
 	@$(BUILD_DIR)/$(BINARY) status >/dev/null
+
+test-setup-prompt:
+	@zsh scripts/test-setup-prompt.zsh
 
 clean:
 	@rm -rf $(BUILD_DIR)

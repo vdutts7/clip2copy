@@ -6,7 +6,7 @@ import Foundation
 /// Source: https://github.com/vdutts7/clip2copy
 /// License: MIT
 
-let VERSION = "1.2.4"
+let VERSION = "1.2.5"
 let AUTHOR = "vdutts7"
 let HOMEPAGE = "https://vd7.io"
 let REPO = "https://github.com/vdutts7/clip2copy"
@@ -443,10 +443,14 @@ func cmdSetup() throws {
     process.standardInput = FileHandle.standardInput
     process.standardOutput = FileHandle.standardOutput
     process.standardError = FileHandle.standardError
-    // Interactive prompts need /dev/tty — FileHandle.standardInput is often not the terminal
+    // Wizard needs full TTY — Process() stdio is often pipes, not the terminal
     if FileManager.default.isReadableFile(atPath: "/dev/tty"),
-       let ttyIn = FileHandle(forReadingAtPath: "/dev/tty") {
+       FileManager.default.isWritableFile(atPath: "/dev/tty"),
+       let ttyIn = FileHandle(forReadingAtPath: "/dev/tty"),
+       let ttyOut = FileHandle(forWritingAtPath: "/dev/tty") {
         process.standardInput = ttyIn
+        process.standardOutput = ttyOut
+        process.standardError = ttyOut
     }
     try process.run()
     process.waitUntilExit()
