@@ -49,12 +49,18 @@ PY
 
 prompt() {
   local msg="$1" default="$2"
-  if [[ -t 0 && -t 1 ]]; then
-    print -n $'\033[2m\033[3m> '"${msg}"$' \033[1;96m['"${default}"$']\033[0m\033[2m: \033[0m'
+  # prompts on stderr — stdout is captured by $(prompt ...)
+  if [[ -r /dev/tty ]]; then
+    if [[ -t 1 ]]; then
+      print -n $'\033[2m\033[3m> '"${msg}"$' \033[1;96m['"${default}"$']\033[0m\033[2m: \033[0m' >/dev/tty
+    else
+      printf '> %s [%s]: ' "$msg" "$default" >/dev/tty
+    fi
+    read -r _reply </dev/tty || true
   else
-    printf '> %s [%s]: ' "$msg" "$default"
+    printf '> %s [%s]: ' "$msg" "$default" >&2
+    read -r _reply || true
   fi
-  read -r _reply || true
   [[ -n "${_reply// /}" ]] && print -r -- "$_reply" || print -r -- "$default"
 }
 
