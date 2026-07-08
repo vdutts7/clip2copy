@@ -1,7 +1,7 @@
 class Clip2copy < Formula
   desc "Auto-copy macOS screenshots to clipboard when saved"
   homepage "https://github.com/vdutts7/clip2copy"
-  url "https://github.com/vdutts7/clip2copy.git", tag: "v1.2.6"
+  url "https://github.com/vdutts7/clip2copy.git", tag: "v1.2.7"
   license "MIT"
   head "https://github.com/vdutts7/clip2copy.git", branch: "main"
 
@@ -11,10 +11,6 @@ class Clip2copy < Formula
   def install
     system "make", "build-fast"
     bin.install "bin/clip2copy"
-    libexec.install "scripts/tui_render.py"
-    libexec.install "scripts/clip2copy-setup.sh"
-    chmod 0755, libexec/"clip2copy-setup.sh"
-    chmod 0755, libexec/"tui_render.py"
 
     (libexec/"clip2copy-watch").write <<~SCRIPT
       #!/bin/zsh
@@ -80,8 +76,7 @@ class Clip2copy < Formula
 
   test do
     assert_match "clip2copy", shell_output("#{bin}/clip2copy --version")
-    assert_predicate libexec/"clip2copy-setup.sh", :exist?
-    assert_predicate libexec/"tui_render.py", :exist?
     assert_predicate bin/"clip2copy", :exist?
+    assert_predicate libexec/"clip2copy-watch", :exist?
   end
 end

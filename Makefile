@@ -46,7 +46,7 @@ service-stop:
 	@pkill -f clip2copy-watch || true
 	@echo "Stopped clip2copy-watch"
 
-test: build-fast test-setup-prompt
+test: build-fast
 	@$(BUILD_DIR)/$(BINARY) --version
 	@$(BUILD_DIR)/$(BINARY) --help >/dev/null
 	@$(BUILD_DIR)/$(BINARY) config show >/dev/null

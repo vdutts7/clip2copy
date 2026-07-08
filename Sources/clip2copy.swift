@@ -1,5 +1,4 @@
 import Cocoa
-import Darwin
 import Foundation
 
 /// clip2copy - auto-copy macOS screenshots to clipboard
@@ -7,7 +6,7 @@ import Foundation
 /// Source: https://github.com/vdutts7/clip2copy
 /// License: MIT
 
-let VERSION = "1.2.6"
+let VERSION = "1.2.7"
 let AUTHOR = "vdutts7"
 let HOMEPAGE = "https://vd7.io"
 let REPO = "https://github.com/vdutts7/clip2copy"
@@ -295,47 +294,6 @@ func promptYesNo(_ message: String, default defaultYes: Bool) -> Bool {
     return defaultYes
 }
 
-func resolvedExecutable() -> String {
-    var buf = [CChar](repeating: 0, count: 4096)
-    var size = UInt32(buf.count)
-    if _NSGetExecutablePath(&buf, &size) == 0 {
-        var path = String(cString: buf)
-        var realBuf = [CChar](repeating: 0, count: 4096)
-        if realpath(path, &realBuf) != nil {
-            path = String(cString: realBuf)
-        }
-        return path
-    }
-    let arg0 = CommandLine.arguments[0]
-    if arg0.hasPrefix("/") {
-        return URL(fileURLWithPath: arg0).resolvingSymlinksInPath().path
-    }
-    let which = Shell.run("/usr/bin/which", [arg0])
-    if which.status == 0, !which.output.isEmpty {
-        return URL(fileURLWithPath: which.output).resolvingSymlinksInPath().path
-    }
-    return arg0
-}
-
-func locateSetupScript() -> String? {
-    let fm = FileManager.default
-    let exe = URL(fileURLWithPath: resolvedExecutable())
-    var candidates: [URL] = [
-        exe.deletingLastPathComponent().appendingPathComponent("../libexec/clip2copy-setup.sh"),
-        exe.deletingLastPathComponent().appendingPathComponent("../scripts/clip2copy-setup.sh"),
-    ]
-    for prefix in [ProcessInfo.processInfo.environment["HOMEBREW_PREFIX"], "/opt/homebrew", "/usr/local"] {
-        guard let prefix, !prefix.isEmpty else { continue }
-        candidates.append(URL(fileURLWithPath: prefix).appendingPathComponent("opt/clip2copy/libexec/clip2copy-setup.sh"))
-    }
-    for url in candidates {
-        let path = url.standardized.path
-        if fm.isExecutableFile(atPath: path) { return path }
-        if fm.fileExists(atPath: path) { return path }
-    }
-    return nil
-}
-
 func isQuiet() -> Bool {
     ProcessInfo.processInfo.environment["CLIP2COPY_QUIET"] == "1"
 }
@@ -421,44 +379,7 @@ func cmdSetupPlain() throws {
 }
 
 func cmdSetup() throws {
-    if CommandLine.arguments.contains("--plain") {
-        try cmdSetupPlain()
-        return
-    }
-    guard let script = locateSetupScript() else {
-        let exe = resolvedExecutable()
-        fputs("""
-        error: setup wizard not found
-          binary: \(exe)
-          expected: ../libexec/clip2copy-setup.sh next to clip2copy
-          fix: brew reinstall clip2copy
-          fallback: clip2copy setup --plain
-
-        """, stderr)
-        throw ConfigError.invalidValue("setup wizard not found")
-    }
-    let scriptDir = URL(fileURLWithPath: script).deletingLastPathComponent().path
-    var env = ProcessInfo.processInfo.environment
-    env["CLIP2COPY_BIN"] = resolvedExecutable()
-    env["CLIP2COPY_TUI_PY"] = "\(scriptDir)/tui_render.py"
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-    process.arguments = [script]
-    process.environment = env
-    process.standardInput = FileHandle.standardInput
-    process.standardOutput = FileHandle.standardOutput
-    process.standardError = FileHandle.standardError
-    // Prompts read /dev/tty inside the script; only wire stdin when Process() has a pipe
-    if FileManager.default.isReadableFile(atPath: "/dev/tty"),
-       let ttyIn = FileHandle(forReadingAtPath: "/dev/tty"),
-       isatty(fileno(stdin)) != 1 {
-        process.standardInput = ttyIn
-    }
-    try process.run()
-    process.waitUntilExit()
-    if process.terminationStatus != 0 {
-        throw ConfigError.invalidValue("setup failed (exit \(process.terminationStatus))")
-    }
+    try cmdSetupPlain()
 }
 
 func cmdConfigShow() {
