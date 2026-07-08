@@ -6,7 +6,7 @@ import Foundation
 /// Source: https://github.com/vdutts7/clip2copy
 /// License: MIT
 
-let VERSION = "1.2.7"
+let VERSION = "1.2.8"
 let AUTHOR = "vdutts7"
 let HOMEPAGE = "https://vd7.io"
 let REPO = "https://github.com/vdutts7/clip2copy"
@@ -17,7 +17,7 @@ struct Clip2CopyConfig: Codable {
     var renamePrefix: String
     var disableShadow: Bool
 
-    init(location: String, rename: Bool, renamePrefix: String = "ss", disableShadow: Bool) {
+    init(location: String, rename: Bool, renamePrefix: String = "", disableShadow: Bool) {
         self.location = location
         self.rename = rename
         self.renamePrefix = renamePrefix
@@ -28,7 +28,7 @@ struct Clip2CopyConfig: Codable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         location = try c.decode(String.self, forKey: .location)
         rename = try c.decode(Bool.self, forKey: .rename)
-        renamePrefix = try c.decodeIfPresent(String.self, forKey: .renamePrefix) ?? "ss"
+        renamePrefix = try c.decodeIfPresent(String.self, forKey: .renamePrefix) ?? ""
         disableShadow = try c.decode(Bool.self, forKey: .disableShadow)
     }
 
@@ -69,7 +69,7 @@ struct Clip2CopyConfig: Codable {
         load() ?? Clip2CopyConfig(
             location: defaultLocation(),
             rename: true,
-            renamePrefix: "ss",
+            renamePrefix: "",
             disableShadow: true
         )
     }
@@ -173,9 +173,7 @@ func expandPath(_ path: String) -> String {
 
 func validatePrefix(_ input: String) throws -> String {
     let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty else {
-        throw ConfigError.invalidValue("Prefix cannot be empty")
-    }
+    if trimmed.isEmpty { return "" }
     guard trimmed.count <= 32 else {
         throw ConfigError.invalidValue("Prefix too long (max 32 chars)")
     }
@@ -184,6 +182,14 @@ func validatePrefix(_ input: String) throws -> String {
         throw ConfigError.invalidValue("Invalid prefix '\(trimmed)': use letters, numbers, _ - only")
     }
     return trimmed
+}
+
+func renameExample(_ prefix: String) -> String {
+    prefix.isEmpty ? "a1b2c3.png" : "\(prefix)-a1b2c3.png"
+}
+
+func prefixDisplay(_ prefix: String) -> String {
+    prefix.isEmpty ? "(none)" : prefix
 }
 
 func validateLocation(_ input: String, createIfMissing: Bool = true) throws -> String {
@@ -240,7 +246,7 @@ func printUsage() {
     Config keys:
       location       desktop | downloads | /any/path
       rename         on | off
-      prefix         filename prefix when rename on (default: ss → ss-<hex>.png)
+      prefix         optional prefix when rename on (Enter/none → a1b2c3.png)
       shadow         on | off   (drop shadow on screenshots)
 
     Notes:
@@ -259,9 +265,9 @@ func resolveLocationInput(_ input: String) throws -> String {
 
 func renameLabel(_ config: Clip2CopyConfig) -> String {
     if config.rename {
-        return "on (\(config.renamePrefix)-<hex>.png)"
+        return "on (e.g. \(renameExample(config.renamePrefix)))"
     }
-    return "off (keep macOS filename)"
+    return "off (keep macOS Screenshot….png)"
 }
 
 func cmdConfigValidate(_ key: String, _ value: String) throws {
@@ -275,6 +281,16 @@ func cmdConfigValidate(_ key: String, _ value: String) throws {
     default:
         throw ConfigError.invalidKey(key)
     }
+}
+
+func promptPrefix(default defaultValue: String) -> String {
+    let hint = defaultValue.isEmpty ? "none" : defaultValue
+    print("Filename prefix — Enter = none, adds text before random id (e.g. ss → ss-a1b2c3.png) [\(hint)]: ", terminator: "")
+    fflush(stdout)
+    guard let line = readLine()?.trimmingCharacters(in: .whitespacesAndNewlines) else {
+        return defaultValue
+    }
+    return line
 }
 
 func prompt(_ message: String, default defaultValue: String) -> String {
@@ -340,11 +356,16 @@ func cmdSetupPlain() throws {
         location = try resolveLocationInput("downloads")
     }
 
-    let rename = promptYesNo("Rename screenshots?", default: existing?.rename ?? true)
-    var prefix = existing?.renamePrefix ?? "ss"
+    print("""
+    Rename screenshots to short random names?
+      yes → e.g. a1b2c3.png  (or ss-a1b2c3.png with prefix "ss")
+      no  → keep macOS name (Screenshot 2026-07-07 at 5.30.00 PM.png)
+    """)
+    let rename = promptYesNo("Rename screenshots", default: existing?.rename ?? true)
+    var prefix = ""
     if rename {
         while true {
-            let candidate = prompt("Filename prefix", default: prefix)
+            let candidate = promptPrefix(default: prefix)
             do {
                 prefix = try validatePrefix(candidate)
                 break
@@ -390,7 +411,7 @@ func cmdConfigShow() {
     print("Config file : \(Clip2CopyConfig.configURL().path)\(hasConfig ? "" : " (defaults — run setup)")")
     print("location    : \(config.location)")
     print("rename      : \(renameLabel(config))")
-    print("prefix      : \(config.renamePrefix)")
+    print("prefix      : \(prefixDisplay(config.renamePrefix))")
     print("shadow off  : \(config.disableShadow)")
     print("")
     print("macOS screencapture")
@@ -477,7 +498,7 @@ func cmdStatus() {
     print("macOS saves : \(systemLoc)")
     print("in sync     : \(aligned ? "yes" : "no — run: clip2copy config apply")")
     print("rename      : \(renameLabel(config))")
-    print("prefix      : \(config.renamePrefix)")
+    print("prefix      : \(prefixDisplay(config.renamePrefix))")
     print("config      : \(Clip2CopyConfig.configURL().path)")
 
     let svc = Shell.run("/bin/zsh", ["-lc", "brew services list 2>/dev/null | grep clip2copy || true"])

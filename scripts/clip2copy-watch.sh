@@ -9,10 +9,9 @@ CLIP="${CLIP2COPY_BIN:-$(command -v clip2copy)}"
 
 WATCH="$($CLIP config get location 2>/dev/null)"
 RENAME="$($CLIP config get rename 2>/dev/null)"
-PREFIX="$($CLIP config get prefix 2>/dev/null)"
+PREFIX="$($CLIP config get prefix 2>/dev/null || true)"
 WATCH="${WATCH:-$HOME/Downloads}"
 RENAME="${RENAME:-1}"
-PREFIX="${PREFIX:-ss}"
 
 "$FSWATCH" "$WATCH" | while read -r f; do
   [[ "$f" == *Screenshot*.png ]] || continue
@@ -27,7 +26,12 @@ PREFIX="${PREFIX:-ss}"
   done
 
   if [[ "$RENAME" == "1" ]]; then
-    newf="$WATCH/${PREFIX}-$(/usr/bin/openssl rand -hex 6).png"
+    hex="$(/usr/bin/openssl rand -hex 6)"
+    if [[ -n "$PREFIX" ]]; then
+      newf="$WATCH/${PREFIX}-${hex}.png"
+    else
+      newf="$WATCH/${hex}.png"
+    fi
     /bin/mv "$f" "$newf" || continue
     "$CLIP" "$newf"
   else

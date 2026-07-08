@@ -1,7 +1,7 @@
 class Clip2copy < Formula
   desc "Auto-copy macOS screenshots to clipboard when saved"
   homepage "https://github.com/vdutts7/clip2copy"
-  url "https://github.com/vdutts7/clip2copy.git", tag: "v1.2.7"
+  url "https://github.com/vdutts7/clip2copy.git", tag: "v1.2.8"
   license "MIT"
   head "https://github.com/vdutts7/clip2copy.git", branch: "main"
 
@@ -12,6 +12,7 @@ class Clip2copy < Formula
     system "make", "build-fast"
     bin.install "bin/clip2copy"
 
+    rm_f libexec/"clip2copy-watch"
     (libexec/"clip2copy-watch").write <<~SCRIPT
       #!/bin/zsh
       FSWATCH="#{Formula["fswatch"].opt_bin}/fswatch"
@@ -20,10 +21,9 @@ class Clip2copy < Formula
       [[ -x "$CLIP" ]] || { echo "clip2copy not found" >&2; exit 1; }
       WATCH="$($CLIP config get location 2>/dev/null)"
       RENAME="$($CLIP config get rename 2>/dev/null)"
-      PREFIX="$($CLIP config get prefix 2>/dev/null)"
+      PREFIX="$($CLIP config get prefix 2>/dev/null || true)"
       WATCH="${WATCH:-$HOME/Downloads}"
       RENAME="${RENAME:-1}"
-      PREFIX="${PREFIX:-ss}"
       "$FSWATCH" "$WATCH" | while read -r f; do
         [[ "$f" == *Screenshot*.png ]] || continue
         [[ "$(basename "$f")" == .* ]] && continue
@@ -33,7 +33,12 @@ class Clip2copy < Formula
           cur=$(/usr/bin/stat -f%z "$f" 2>/dev/null || echo 0)
         done
         if [[ "$RENAME" == "1" ]]; then
-          newf="$WATCH/${PREFIX}-$(/usr/bin/openssl rand -hex 6).png"
+          hex=$(/usr/bin/openssl rand -hex 6)
+          if [[ -n "$PREFIX" ]]; then
+            newf="$WATCH/${PREFIX}-${hex}.png"
+          else
+            newf="$WATCH/${hex}.png"
+          fi
           /bin/mv "$f" "$newf" || continue
           "$CLIP" "$newf"
         else
